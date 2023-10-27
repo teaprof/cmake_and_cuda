@@ -1,0 +1,4 @@
+#!/bin/sh
+#place here your path to actual installation of nvcc 
+#and copy this file to /usr/bin or /bin
+exec /usr/local/cuda/bin/nvcc "$@"
