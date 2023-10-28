@@ -67,7 +67,7 @@ nvcc fatal   : Don't know what to do with 'fakefile'
 
 Путь 1. Убрать символьную ссылку
 ------------------------
-Убрать ссылку `/usr/bin/nvcc`. Тогда `enable_language(CUDA)` не найдёт CUDA (почему-то в `/usr/local/cuda` он может найти). Почему так происходит - непонятно. Одно можно сказать точно, что при сравнении скриптов поиска CUDA в cmake 3.27 и 3.28 rc2 видны значительные изменения, что свидетельствует о том, что алгоритм поиска CUDA ещё не устоялся. Напротив, `findCUDAToolkit` как наследник `findCUDA` (объявлен deprecated), имеет устоявшийся алгоритм поиска CUDA. Поэтому файл `CMakeLists.txt` может содержать такое решение:
+Убрать ссылку `/usr/bin/nvcc`. Тогда `enable_language(CUDA)` не найдёт CUDA в `/usr/local/cuda`. Почему так происходит - непонятно. Одно можно сказать точно, что при сравнении скриптов поиска CUDA в cmake 3.27 и 3.28 rc2 видны значительные изменения, что свидетельствует о том, что алгоритм поиска CUDA ещё не устоялся. Напротив, `findCUDAToolkit` как наследник `findCUDA` (объявлен deprecated), имеет устоявшийся алгоритм поиска CUDA. Поэтому файл `CMakeLists.txt` может содержать такое решение:
 ```CMakeLists.txt
 cmake_minimum_required(VERSION 3.22)
 project(prjname)
@@ -79,13 +79,6 @@ set(CMAKE_CUDA_COMPILER ${CUDAToolkit_NVCC_EXECUTABLE})
 enable_language(CUDA)
 add_executable(aaa aaa.cu)
 ```
-
-Скрипт findCUDAToolkit пытается найти все компоненты CUDAToolkit, в том числе и не нужные для конкретного проекта, поэтому он может выдавать warning, если какой-то компонент не найден. Например, может появиться такое сообщение
-```console
-CMake Warning at /snap/cmake/1336/share/cmake-3.27/Modules/FindCUDAToolkit.cmake:1072 (message):
-  Could not find librt library, needed by CUDA::cudart_static
-```
-Оно означет, что статическая линковка с библиотеками CUDA не получится.
 
 
 
@@ -119,7 +112,17 @@ exec /usr/local/cuda/bin/nvcc "$@"
 
 В этом случае `nvcc -v fakefile` будет выдавать правильную информацию о расположении самого компилятора и всего CUDA Toolkit. Файл `CMakeLists.txt` будет выглядеть как в предыдущем пункте.
 
-Прим.: именно так делается при установке ```nvidia-cuda-toolkit``` через `apt install`.<br/>
+**Прим.**: именно так делается при установке ```nvidia-cuda-toolkit``` через `apt install`.<br/>
 
-</li></ol>
+Замечания
+=========
+
+Команда `find_package(CUDAToolkit)` ищет pthreads, не совсем понятно, зачем. 
+
+Скрипт findCUDAToolkit может выдавать warning, если какой-то компонент не найден. Например, может появиться такое сообщение
+```console
+CMake Warning at /snap/cmake/1336/share/cmake-3.27/Modules/FindCUDAToolkit.cmake:1072 (message):
+  Could not find librt library, needed by CUDA::cudart_static
+```
+Оно означет, что статическая линковка с библиотеками CUDA не получится. Чтобы `find_package(CUDAToolkit)` работал корректно, надо `project(name)` объявлять до вызова `find_package(CUDAToolkit)`.
 
