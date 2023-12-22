@@ -1,7 +1,6 @@
-How does cmake find CUDA
-========================
+# How does cmake find CUDA
 
-**REM**: Below we describe the algorithm used by cmake to find CUDA. If you need the express solution, please, jump to the end of this document.
+**REM**: Below we describe the algorithm used by cmake to find CUDA. If you need the express solution, please, jump to the [solution](#solution).
 
 When cmake encounters `enable_language(CUDA)` instruction it starts the chain of scripts to find CUDA components. The most important components are the following:
 
@@ -45,8 +44,7 @@ nvcc fatal   : Don't know what to do with 'fakefile'
 cmake parses the output of such command and finds the string containing `TOP=<CUDA_ROOT>`, this directory is treated as the directory where CUDA components have been installed.
 
 
-Why doesn't a symlink work
-==================================================================================
+# Why doesn't a symlink work
 
 When we create symlink named `nvcc` in `/usr/bin` pointing to the nvcc executable, the utility `find_program` finds this link and cmake stops searching CUDA. Then cmake tries to locate
 other components of CUDA by running `cmake -v fakefile` which produce something like the this
@@ -66,11 +64,9 @@ nvcc fatal   : Don't know what to do with 'fakefile'
 
 One can see that if compiler is called via symlink it can't determine the location of CUDA components (compare with previous output example). If we try to compile some existent file instead of `fakefile`, the compiler will fail because it doesn't know where to search CUDA include files and libraries (the correct pathes should be passed as command-line parameters using keys -I and -L). But the next problem is that nvcc doesn't know how to find nvlink. Next, anyone can create a system-wide symlink to nvlink. We didn't try this because we have a better solution.
 
-Solution
-========
+# Solution
 
-Approach 1. Use findCUDAToolkit package
----------------------------------------
+## Approach 1. Use findCUDAToolkit package
 
 Use findCUDAToolkit package which is a successor of the deprecated findCUDA package. The findCUDA algorithms have been improved over the years and they migrated to the new findCUDAToolkit package. So, the new findCUDAToolkit package should have very strong capabilities to find CUDA toolkit. 
 
@@ -94,8 +90,7 @@ Note, that you should remove symlink `/usr/bin/nvcc` to your nvcc installation, 
 
 
 
-Approach 2. Set CUDACXX environment variable
---------------------------------------------
+## Approach 2. Set CUDACXX environment variable
 
 Set the following variable
 
@@ -113,8 +108,8 @@ add_executable(aaa aaa.cu)
 
 In this case, cmake will find nvcc using CUDACXX environment variable and calculate the location of other CUDA components using `nvcc -v fakefile`.
 
-Approach 3. Replace symlink to nvcc with simple script
-------------------------------------------------------
+## Approach 3. Replace symlink to nvcc with simple script
+
 Replace symlink `/usr/bin/nvcc` with the following script
 
 ```bash
@@ -127,15 +122,14 @@ This hack calls nvcc using the correct path and this allows nvcc to find other c
 
 **Rem.**: This way is used when ```nvidia-cuda-toolkit``` installed via `apt install`.<br/>
 
-Remarks
-=======
+# Remarks
 
-Remark 1
---------
+## Remark 1
+
 The `find_package(CUDAToolkit)` command also looks for pthreads, we don't know why.
 
-Remark 2
---------
+## Remark 2
+
 The findCUDAToolkit script can produce the warning if one or more CUDA components were not found. For example, the following warning can be printed
 ```console
 CMake Warning at /snap/cmake/1336/share/cmake-3.27/Modules/FindCUDAToolkit.cmake:1072 (message):
