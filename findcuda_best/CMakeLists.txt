@@ -13,7 +13,7 @@ if(NOT CMAKE_CUDA_COMPILER)
 	message(STATUS "CMAKE_CUDA_COMPILER = ${CMAKE_CUDA_COMPILER}, running FindCUDAToolkit")
 	find_package(CUDAToolkit) #New in version 3.17  	
 	if(${CUDAToolkit_FOUND})
-		#i f found, we set CMAKE_CUDA_COMPILER variable as a hint to check_language/enable_language 
+		#if found, we set CMAKE_CUDA_COMPILER variable as a hint to check_language/enable_language 
 		set(CMAKE_CUDA_COMPILER ${CUDAToolkit_NVCC_EXECUTABLE})
 		# And now we run check_language again
 		check_language(CUDA)

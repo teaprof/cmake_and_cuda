@@ -1,20 +1,22 @@
-Как cmake ищет CUDA
-===================
+How does cmake find CUDA
+========================
 
-**REM**: Тут описан процесс поиска CUDA, если нужно быстрое решение, то можно сразу отмотать в конец текста.
+**REM**: Below we describe the algorithm used by cmake to find CUDA. If you need the express solution, please, jump to the end of this document.
 
-Когда cmake встречает инструкцию `enable_language(CUDA)`, запускается цепочка скриптов для поиска компоненотов CUDA. К ним относятся
+When cmake encounters `enable_language(CUDA)` instruction it starts the chain of scripts to find CUDA components. The most important components are the following:
 
-* исполняемые файлы, это прежде всего компилятор nvcc, компоновщики nvlink и fatbinary
-* директории, в которых расположены header-файлы CUDA и библиотеки CUDA.
 
-cmake ищет CUDA, следуя некоторым правилам. 
+* executable files: nvcc compiler itself, nvlink linker and fatbinary linker;
+* folders where CUDA headers and libraries are placed.
 
-1. Сначала он проверяет "подсказки" - это переменные, переданные через командную строку, переменные из кэша `CMakeCache.txt` и переменные среды окружения. 
-2. Потом он проверяет наличие компилятора nvcc, используя довольно общую утилиту из состава скриптов cmake, называемую `find_program`. Если `find_program` находит nvcc, то поиск прекращается и происходит переход к следующему этапу - определение расположения других компонентов CUDA по известному расположению компилятора.
-3. Наконец, cmake проверяет стандартные пути (на линуксе это `/usr/local/cuda-X.Y`, именно сюда ставится CUDA, скачанная с сайта NVIDIA).
+cmake follows some rules while searching CUDA. These rules are:
 
-Когда компилятор уже найден, для поиска остальных компонентов CUDA, происходит запуск `nvcc -v fakefile`, где `fakefile` - имя любого несуществующего файла. Примерный вывод этой команды такой:
+1. First, check variables that can help to locate CUDA. These variables can be passed through command line, cmake cache or environment variables.
+2. Next, it tries to locate nvcc using general purpose utility `find_program`. If `find_program` succeeded, cmake stops searching CUDA and jumps to the next stage that is locating CUDA components based on the known location of the nvcc compiler.
+3. Finally, cmake tests standard pathes where CUDA can be installed (on linux this is `/usr/local/cuda-X.Y`, this is a path where CUDA is installed if installer have been downloaded from the official NVIDIA site).
+
+When nvcc compiler have been already located the location of other components is determined with `nvcc -v fakefile` command, where `fakefile` is the name of a non-existent file.
+The output of such command is like this:
 
 ```console
 tea@comp:~/projects/findcuda/build$ /usr/local/cuda/bin/nvcc -v fakefile
@@ -36,15 +38,19 @@ tea@comp:~/projects/findcuda/build$ /usr/local/cuda/bin/nvcc -v fakefile
 #$ PTXAS_FLAGS=
 nvcc fatal   : Don't know what to do with 'fakefile'
 ```
-**Прим.**: Ключ `-v` означает 'verbose', а `fakefile` нужен только для того, чтобы инициировать процесс компиляции, в результате которого выводятся эти значения.
+**Rem.**: `-v` key means 'verbose'
 
-Для определения директории, куда установлена CUDA, cmake парсит вывод этой команды и находит строку, содержащую `TOP=<CUDA_ROOT>`.
+**Rem.** The only reason to substitute`fakefile` is to initiate compilation process, which starts from printing the location of basic CUDA components.
+
+cmake parses the output of such command and finds the string containing `TOP=<CUDA_ROOT>`, this directory is treated as the directory where CUDA components have been installed.
 
 
-Почему CUDA не находит cmake, если сделать символьную ссылку на компилятор
-==========================================================================
+Why doesn't a symlink work
+==================================================================================
 
-При создании символьной ссылки `/usr/bin/nvcc`, указывающей на компилятор `/usr/local/cuda/bin/nvcc`, `find_program` находит именно её. На этом поиск завершается. Дальше cmake пытается найти недостающие компоненты CUDA путём вызова `cmake -v fakefile`. Вывод этой команды примерно такой:
+When we create symlink named `nvcc` in `/usr/bin` pointing to the nvcc executable, the utility `find_program` finds this link and cmake stops searching CUDA. Then cmake tries to locate
+other components of CUDA by running `cmake -v fakefile` which produce something like the this
+
 ```
 tea@comp:~/projects/findcuda$ /usr/bin/nvcc -v fakefile
 #$ _NVVM_BRANCH_=nvvm
@@ -58,16 +64,20 @@ tea@comp:~/projects/findcuda$ /usr/bin/nvcc -v fakefile
 nvcc fatal   : Don't know what to do with 'fakefile'
 ```
 
-Видно, что даже сам компилятор не знает, где искать родные библиотеки CUDA (сравнить с предыдущим вызовом). Более того, попытка скомпилировать что-нибудь (эта техника используется cmake для определения параметров найденного компилятора) с помощью найденной ссылки на nvcc потребует явного указания include-директорий и директорий с библиотечными бинарными файлами, а cmake на данном этапе не знает, где их искать.
+One can see that if compiler is called via symlink it can't determine the location of CUDA components (compare with previous output example). If we try to compile some existent file instead of `fakefile`, the compiler will fail because it doesn't know where to search CUDA include files and libraries (the correct pathes should be passed as command-line parameters using keys -I and -L). But the next problem is that nvcc doesn't know how to find nvlink. Next, anyone can create a system-wide symlink to nvlink. We didn't try this because we have a better solution.
 
-Даже если указать через -I и -L правильные пути, линкер nvlink всё ещё не найден. Можно его сделать system-wide (например, создать ссылку /usr/bin/nvlink), но не исключено, что это не решит полностью проблему поиска остальных компонентов cmake toolkit.
+Solution
+========
 
-Как исправить
-=============
+Approach 1. Use findCUDAToolkit package
+---------------------------------------
 
-Путь 1. Убрать символьную ссылку
-------------------------
-Убрать ссылку `/usr/bin/nvcc`. Тогда `enable_language(CUDA)` не найдёт CUDA в `/usr/local/cuda`. Почему так происходит - непонятно. Одно можно сказать точно, что при сравнении скриптов поиска CUDA в cmake 3.27 и 3.28 rc2 видны значительные изменения, что свидетельствует о том, что алгоритм поиска CUDA ещё не устоялся. Напротив, `findCUDAToolkit` как наследник `findCUDA` (объявлен deprecated), имеет устоявшийся алгоритм поиска CUDA. Поэтому файл `CMakeLists.txt` может содержать такое решение:
+Use findCUDAToolkit package which is a successor of the deprecated findCUDA package. The findCUDA algorithms have been improved over the years and they migrated to the new findCUDAToolkit package. So, the new findCUDAToolkit package should have very strong capabilities to find CUDA toolkit. 
+
+In contrast, the standard cmake `enable_language(CUDA)` command will not find CUDA if it is installed in `/usr/local/cuda-X.Y` directory. We don't know why, but we can say that CUDA searching scripts have been changed significantly between cmake 3.27 and 3.28 rc2, so we can conclude that these algorithms are not stable yet.
+
+To use findCUDAToolkit package write the following code:
+
 ```CMakeLists.txt
 cmake_minimum_required(VERSION 3.22)
 project(prjname)
@@ -80,18 +90,20 @@ enable_language(CUDA)
 add_executable(aaa aaa.cu)
 ```
 
+Note, that you should remove symlink `/usr/bin/nvcc` to your nvcc installation, if it exsists. But you should not remove `/usr/bin/nvcc` if it is a regular file created by nvcc installation procedure (in other words, you should not remove this file if it is not copy of nvcc installed somewhere else, see above).
 
 
-Путь 2. Через переменную окружения
-----------------------------------
 
-Задать переменную окружения
+Approach 2. Set CUDACXX environment variable
+--------------------------------------------
+
+Set the following variable
 
 ```console
 export CUDACXX=/usr/local/cuda/bin/nvcc
 ```
 
-При это в самом `CMakeLists.txt` путь к CUDA указывать не надо:
+Your `CMakeLists.txt` should be like this:
 
 ```CMakeLists.txt
 cmake_minimum_required(VERSION 3.22) # VERSION should be not too small, for example, 3.14 or higher
@@ -99,30 +111,36 @@ project(prjname CUDA)
 add_executable(aaa aaa.cu)
 ```
 
-Тогда cmake найдёт nvcc по указанному пути, и, вызвав `nvcc -v fakefile`, вычислит все остальные зависимости.
+In this case, cmake will find nvcc using CUDACXX environment variable and calculate the location of other CUDA components using `nvcc -v fakefile`.
 
-Путь 3. Заменить символьную ссылку на простой скрипт
---------------------------------------------
-Заменить символьную ссылку `/usr/bin/nvcc` на скрипт следующего содержания:
+Approach 3. Replace symlink to nvcc with simple script
+------------------------------------------------------
+Replace symlink `/usr/bin/nvcc` with the following script
 
 ```bash
 #!/bin/sh
+#place here your path to nvcc installation
 exec /usr/local/cuda/bin/nvcc "$@"
 ```
 
-В этом случае `nvcc -v fakefile` будет выдавать правильную информацию о расположении самого компилятора и всего CUDA Toolkit. Файл `CMakeLists.txt` будет выглядеть как в предыдущем пункте.
+This hack calls nvcc using the correct path and this allows nvcc to find other components when `nvcc -v fakefile` is executed. The `CMakeLists.txt` file for this case is the same as in the previous approach.
 
-**Прим.**: именно так делается при установке ```nvidia-cuda-toolkit``` через `apt install`.<br/>
+**Rem.**: This way is used when ```nvidia-cuda-toolkit``` installed via `apt install`.<br/>
 
-Замечания
-=========
+Remarks
+=======
 
-Команда `find_package(CUDAToolkit)` ищет pthreads, не совсем понятно, зачем. 
+Remark 1
+--------
+The `find_package(CUDAToolkit)` command also looks for pthreads, we don't know why.
 
-Скрипт findCUDAToolkit может выдавать warning, если какой-то компонент не найден. Например, может появиться такое сообщение
+Remark 2
+--------
+The findCUDAToolkit script can produce the warning if one or more CUDA components were not found. For example, the following warning can be printed
 ```console
 CMake Warning at /snap/cmake/1336/share/cmake-3.27/Modules/FindCUDAToolkit.cmake:1072 (message):
   Could not find librt library, needed by CUDA::cudart_static
 ```
-Оно означет, что статическая линковка с библиотеками CUDA не получится. Чтобы `find_package(CUDAToolkit)` работал корректно, надо `project(name)` объявлять до вызова `find_package(CUDAToolkit)`.
+This means that static linkink with CUDA libraries will produce an error. To fix this problem, place `project(name)` before `find_package(CUDAToolkit)` in your `CMakeLists.txt` file.
+
 
