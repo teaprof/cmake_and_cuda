@@ -120,6 +120,8 @@ exec /usr/local/cuda/bin/nvcc "$@"
 
 This hack calls nvcc using the correct path and this allows nvcc to find other components when `nvcc -v fakefile` is executed. The `CMakeLists.txt` file for this case is the same as in the previous approach.
 
+Do not forget to grant the execution flags: `chmod ugo+x /usr/bin/nvcc`
+
 **Rem.**: This way is used when ```nvidia-cuda-toolkit``` installed via `apt install`.<br/>
 
 # Remarks
